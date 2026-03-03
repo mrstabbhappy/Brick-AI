@@ -1,0 +1,16 @@
+
+path: "C:/Brick AI/BRICK_AI_DEV/data/brick_defects"
+train: train/images
+val: val/images
+test: test/images
+
+names:
+  0: crack
+  1: chip
+  2: hole
+  3: indent
+  4: weathering
+  5: blemish
+  6: spot
+
+nc: 7

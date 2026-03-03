@@ -1,0 +1,31 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pr: none
+pool:
+  name: tw-dna-dev
+  demands:
+  - ImageOverride -equals ubuntu-22.04
+
+variables:
+  webAppName: 'aps-tw-ai-dev-uks-001'
+
+  artifactName: 'drop'
+  artifactZip: 'app.zip'
+
+stages:
+  - stage: Build
+    displayName: Build
+    jobs:
+      - job: Build
+        displayName: Build artifact
+      
+        steps:
+          - checkout: self
+
+

@@ -1,0 +1,898 @@
+{% extends 'base.html' %}
+{% block title %}Compare - Brick AI{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:1.5rem;">
+  <h1 class="page-title">Compare bricks</h1>
+  <p class="muted small">Pick two bricks for an in-depth side-by-side comparison</p>
+  <span class="brush-stroke"></span>
+</div>
+
+<form id="compare-form" method="get" class="card card--accent" style="max-width:720px;">
+  <div class="comparison-grid">
+    <div>
+      <label for="left_name">Left brick</label>
+      <input id="left" name="left" type="hidden" value="{{ left_id or '' }}" />
+      <input id="left_name" value="" placeholder="Search and pick a brick" list="brick-options-left" autocomplete="off" />
+      <datalist id="brick-options-left">
+        {% for b in pool or [] %}
+          <option value="{{ b.label }}" data-id="{{ b.id }}">{{ b.label }}</option>
+        {% endfor %}
+      </datalist>
+      <p class="muted small" style="margin-top:0.35rem;">Type to search; select from the list</p>
+    </div>
+    <div>
+      <label for="right_name">Right brick</label>
+      <input id="right" name="right" type="hidden" value="{{ right_id or '' }}" />
+      <input id="right_name" value="" placeholder="Search and pick a brick" list="brick-options-right" autocomplete="off" />
+      <datalist id="brick-options-right">
+        {% for b in pool or [] %}
+          <option value="{{ b.label }}" data-id="{{ b.id }}">{{ b.label }}</option>
+        {% endfor %}
+      </datalist>
+      <p class="muted small" style="margin-top:0.35rem;">Type to search; select from the list</p>
+    </div>
+  </div>
+  <div style="margin-top:1rem;">
+    <label for="bu">BU code (optional, for region-aware pricing)</label>
+    <input id="bu" name="bu" value="{{ bu_code or '' }}" placeholder="e.g. midlands" list="bu-options" autocomplete="off" />
+    <datalist id="bu-options">
+      {% for bu in bu_locations or [] %}
+        <option value="{{ bu.id }}" label="{{ bu.name }}">{{ bu.name }}</option>
+      {% endfor %}
+    </datalist>
+    <p class="muted small" style="margin-top:0.35rem;">If you’re signed in, your profile BU is used by default. Start typing to pick a BU (e.g. “midlands”).</p>
+  </div>
+  <div style="margin-top:1.25rem;">
+    <button id="compare-btn" type="submit">Compare</button>
+    <span id="compare-warning" class="muted small" style="margin-left:0.75rem;display:none;">Pick two different bricks.</span>
+  </div>
+</form>
+
+<script>
+  (function () {
+    const form = document.getElementById('compare-form');
+    const leftHidden = document.getElementById('left');
+    const rightHidden = document.getElementById('right');
+    const leftInput = document.getElementById('left_name');
+    const rightInput = document.getElementById('right_name');
+    const leftList = document.getElementById('brick-options-left');
+    const rightList = document.getElementById('brick-options-right');
+    const compareBtn = document.getElementById('compare-btn');
+    const warning = document.getElementById('compare-warning');
+
+    if (!leftInput || !rightInput || !leftList || !rightList || !leftHidden || !rightHidden) return;
+
+    const options = Array.from(leftList.querySelectorAll('option')).map(o => ({
+      id: o.getAttribute('data-id') || '',
+      label: o.value || o.textContent || ''
+    })).filter(x => x.id && x.label);
+
+    const byLabel = new Map(options.map(o => [o.label.toLowerCase(), o.id]));
+    const byId = new Map(options.map(o => [o.id, o.label]));
+
+    function setHiddenFromVisible() {
+      const l = (leftInput.value || '').trim();
+      const r = (rightInput.value || '').trim();
+      leftHidden.value = byLabel.get(l.toLowerCase()) || '';
+      rightHidden.value = byLabel.get(r.toLowerCase()) || '';
+    }
+
+    // If query params contained IDs, populate visible inputs with labels.
+    if (leftHidden.value) leftInput.value = byId.get(leftHidden.value) || '';
+    if (rightHidden.value) rightInput.value = byId.get(rightHidden.value) || '';
+    setHiddenFromVisible();
+
+    const leftAll = options;
+    const rightAll = options;
+
+    function render(listEl, all, excludedLabel) {
+      const v = (excludedLabel || '').trim().toLowerCase();
+      listEl.innerHTML = '';
+      for (const opt of all) {
+        if (v && opt.label.toLowerCase() === v) continue;
+        const el = document.createElement('option');
+        el.value = opt.label;
+        el.setAttribute('data-id', opt.id);
+        el.textContent = opt.label;
+        listEl.appendChild(el);
+      }
+    }
+
+    function sync() {
+      const leftVal = (leftInput.value || '').trim();
+      const rightVal = (rightInput.value || '').trim();
+      render(rightList, rightAll, leftVal);
+      render(leftList, leftAll, rightVal);
+
+      setHiddenFromVisible();
+
+      const same = leftHidden.value && rightHidden.value && leftHidden.value === rightHidden.value;
+      if (compareBtn) compareBtn.disabled = !!same;
+      if (warning) warning.style.display = same ? 'inline' : 'none';
+    }
+
+    leftInput.addEventListener('input', sync);
+    rightInput.addEventListener('input', sync);
+    if (form) {
+      form.addEventListener('submit', (e) => {
+        setHiddenFromVisible();
+        // Block submit if either side isn't a known brick.
+        if (!leftHidden.value || !rightHidden.value) {
+          e.preventDefault();
+          if (warning) {
+            warning.textContent = 'Pick two bricks from the list.';
+            warning.style.display = 'inline';
+          }
+          return;
+        }
+      });
+    }
+    sync();
+  })();
+</script>
+
+{% if comparison %}
+  <div style="margin-top:1.5rem;">
+    <h2 style="margin-bottom:1rem;">Comparison results</h2>
+    <span class="brush-stroke--grape brush-stroke" style="margin-bottom:1rem;"></span>
+
+    {% if left_card and right_card %}
+      <div class="compare-images">
+        <div class="card">
+          <div class="muted small">Left</div>
+          <div style="font-weight:700;">{{ left_card.name }}</div>
+          <div class="muted small">{{ left_card.brand or '' }}{% if left_card.colour %} • {{ left_card.colour }}{% endif %}{% if left_card.item_code %} • {{ left_card.item_code }}{% endif %}</div>
+
+          <div class="compare-image-stack" style="margin-top:0.75rem;">
+            <img class="compare-base" src="{{ left_card.image_url }}" alt="{{ left_card.name }}" />
+            {% if comparison.heatmap and comparison.heatmap.left_overlay %}
+              <img class="compare-overlay" data-overlay="left" data-layer="heatmap" src="{{ comparison.heatmap.left_overlay }}" alt="Heatmap overlay" />
+            {% endif %}
+            {% if comparison.defects_overlay and comparison.defects_overlay.left_overlay %}
+              <img class="compare-overlay" data-overlay="left" data-layer="defects" src="{{ comparison.defects_overlay.left_overlay }}" alt="Defects overlay" />
+            {% endif %}
+          </div>
+
+          <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;">
+            <button type="button" class="btn-secondary" data-toggle="left" data-layer="heatmap">Diff heatmap</button>
+            <button type="button" class="btn-secondary" data-toggle="left" data-layer="defects" data-brickname="{{ left_card.name }}" {% if not (comparison.defects_overlay and comparison.defects_overlay.available and comparison.defects_overlay.left_overlay) %}disabled{% endif %}>Defects (YOLO)</button>
+            <span class="muted small">Diff highlights change; YOLO highlights defects</span>
+          </div>
+          {% if comparison.defects_overlay and comparison.defects_overlay.available and not comparison.defects_overlay.left_overlay %}
+            <div class="muted small" style="margin-top:0.5rem;">No defects detected on the left brick.</div>
+          {% endif %}
+          {% if comparison.defects_overlay and not comparison.defects_overlay.available %}
+            <div class="muted small" style="margin-top:0.5rem;">
+              YOLO disabled: {{ (comparison.defects_overlay.status.reason if comparison.defects_overlay.status else None) or 'missing weights' }}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="card">
+          <div class="muted small">Right</div>
+          <div style="font-weight:700;">{{ right_card.name }}</div>
+          <div class="muted small">{{ right_card.brand or '' }}{% if right_card.colour %} • {{ right_card.colour }}{% endif %}{% if right_card.item_code %} • {{ right_card.item_code }}{% endif %}</div>
+
+          <div class="compare-image-stack" style="margin-top:0.75rem;">
+            <img class="compare-base" src="{{ right_card.image_url }}" alt="{{ right_card.name }}" />
+            {% if comparison.heatmap and comparison.heatmap.right_overlay %}
+              <img class="compare-overlay" data-overlay="right" data-layer="heatmap" src="{{ comparison.heatmap.right_overlay }}" alt="Heatmap overlay" />
+            {% endif %}
+            {% if comparison.defects_overlay and comparison.defects_overlay.right_overlay %}
+              <img class="compare-overlay" data-overlay="right" data-layer="defects" src="{{ comparison.defects_overlay.right_overlay }}" alt="Defects overlay" />
+            {% endif %}
+          </div>
+
+          <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;">
+            <button type="button" class="btn-secondary" data-toggle="right" data-layer="heatmap">Diff heatmap</button>
+            <button type="button" class="btn-secondary" data-toggle="right" data-layer="defects" data-brickname="{{ right_card.name }}" {% if not (comparison.defects_overlay and comparison.defects_overlay.available and comparison.defects_overlay.right_overlay) %}disabled{% endif %}>Defects (YOLO)</button>
+            <span class="muted small">Diff highlights change; YOLO highlights defects</span>
+          </div>
+          {% if comparison.defects_overlay and comparison.defects_overlay.available and not comparison.defects_overlay.right_overlay %}
+            <div class="muted small" style="margin-top:0.5rem;">No defects detected on the right brick.</div>
+          {% endif %}
+          {% if comparison.defects_overlay and not comparison.defects_overlay.available %}
+            <div class="muted small" style="margin-top:0.5rem;">
+              YOLO disabled: {{ (comparison.defects_overlay.status.reason if comparison.defects_overlay.status else None) or 'missing weights' }}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
+      <div class="stat-card">
+        <div class="stat-value" style="color:var(--tw-rubine-red);">{{ '%.1f'|format(comparison.overall*100) }}%</div>
+        <div class="stat-label">Overall</div>
+        <div class="sim-bar-track" style="margin-top:0.5rem;"><div class="sim-bar-fill" style="width:{{ (comparison.overall*100)|round }}%;"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ '%.1f'|format(comparison.colour*100) }}%</div>
+        <div class="stat-label">Colour</div>
+        <div class="sim-bar-track" style="margin-top:0.5rem;"><div class="sim-bar-fill" style="width:{{ (comparison.colour*100)|round }}%;"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ '%.1f'|format(comparison.texture*100) }}%</div>
+        <div class="stat-label">Texture</div>
+        <div class="sim-bar-track" style="margin-top:0.5rem;"><div class="sim-bar-fill" style="width:{{ (comparison.texture*100)|round }}%;"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ '%.1f'|format(comparison.defects*100) }}%</div>
+        <div class="stat-label">Pattern / Defects</div>
+        <div class="sim-bar-track" style="margin-top:0.5rem;"><div class="sim-bar-fill" style="width:{{ (comparison.defects*100)|round }}%;"></div></div>
+      </div>
+    </div>
+
+    <div class="card compare-ai-summary" style="margin-top:1rem;">
+      <h3 style="margin-top:0;">AI summary</h3>
+      <p style="margin:0;">{{ comparison.ai_summary }}</p>
+    </div>
+
+    <div class="compare-details-row" style="margin-top:0.75rem;">
+      <div class="card">
+        <h3 style="margin-top:0;">Colour difference</h3>
+        <div class="muted small">Average colour (computed from the brick image)</div>
+        <div style="margin-top:0.5rem;display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+          <div class="compare-swatch" title="Left avg" style="background:{{ comparison.left_avg_colour_hex }};"></div>
+          <div class="compare-swatch" title="Right avg" style="background:{{ comparison.right_avg_colour_hex }};"></div>
+          <div class="muted small">ΔE≈{{ '%.1f'|format(comparison.colour_delta_e) }} ({{ comparison.colour_delta_desc }})</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Texture difference</h3>
+        <div class="muted small">Edge density and roughness (from image analysis)</div>
+        <div style="margin-top:0.5rem;" class="small">
+          <div><strong>Left</strong> — edge density {{ '%.3f'|format(comparison.left_texture.edge_density) }}, roughness {{ '%.1f'|format(comparison.left_texture.laplacian_var) }}</div>
+          <div><strong>Right</strong> — edge density {{ '%.3f'|format(comparison.right_texture.edge_density) }}, roughness {{ '%.1f'|format(comparison.right_texture.laplacian_var) }}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">Price comparison (region-aware)</h3>
+        <div class="muted small">BU: {{ comparison.pricing.bu_code or 'not set' }}</div>
+        <div style="margin-top:0.5rem;" class="small">
+          <div><strong>Left</strong> — {{ comparison.pricing.left_summary }}</div>
+          <div><strong>Right</strong> — {{ comparison.pricing.right_summary }}</div>
+        </div>
+        <div class="grid" style="margin-top:0.75rem;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.5rem;align-items:start;">
+          <div class="stat-card">
+            <div class="stat-label">Left bands</div>
+            <div class="muted small">T1 {{ comparison.pricing.left_bands.T1 if comparison.pricing.left_bands.T1 is not none else '—' }} • T2 {{ comparison.pricing.left_bands.T2 if comparison.pricing.left_bands.T2 is not none else '—' }}</div>
+            <div class="muted small">T3 {{ comparison.pricing.left_bands.T3 if comparison.pricing.left_bands.T3 is not none else '—' }} • T4 {{ comparison.pricing.left_bands.T4 if comparison.pricing.left_bands.T4 is not none else '—' }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Right bands</div>
+            <div class="muted small">T1 {{ comparison.pricing.right_bands.T1 if comparison.pricing.right_bands.T1 is not none else '—' }} • T2 {{ comparison.pricing.right_bands.T2 if comparison.pricing.right_bands.T2 is not none else '—' }}</div>
+            <div class="muted small">T3 {{ comparison.pricing.right_bands.T3 if comparison.pricing.right_bands.T3 is not none else '—' }} • T4 {{ comparison.pricing.right_bands.T4 if comparison.pricing.right_bands.T4 is not none else '—' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="compare-lightbox" class="compare-dialog">
+    <div class="compare-dialog__inner">
+      <div style="display:flex;gap:0.75rem;align-items:center;justify-content:space-between;">
+        <div>
+          <div class="muted small" id="compare-lightbox-side">Defects view</div>
+          <div style="font-weight:700;" id="compare-lightbox-title">Brick</div>
+        </div>
+        <button type="button" class="btn-secondary" id="compare-lightbox-close">Close</button>
+      </div>
+
+      <div class="compare-lightbox-stack" style="margin-top:0.75rem;">
+        <div class="compare-image-stack compare-image-stack--zoom">
+          <img class="compare-base" id="compare-lightbox-base" src="" alt="Brick image" />
+          <img class="compare-overlay compare-overlay--zoom" id="compare-lightbox-overlay" src="" alt="Defects overlay" />
+        </div>
+        <div class="muted small" style="margin-top:0.5rem;">Tip: the overlay is scaled up so labels are readable.</div>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    (function () {
+      // Ensure overlays are OFF by default.
+      document.querySelectorAll('.compare-overlay').forEach(el => { el.style.display = 'none'; });
+
+      function setLayer(which, layer, on) {
+        const sel = '.compare-overlay[data-overlay="' + which + '"][data-layer="' + layer + '"]';
+        const overlay = document.querySelector(sel);
+        if (!overlay) return;
+        overlay.style.display = on ? 'block' : 'none';
+      }
+
+      function toggle(which, layer) {
+        const sel = '.compare-overlay[data-overlay="' + which + '"][data-layer="' + layer + '"]';
+        const overlay = document.querySelector(sel);
+        if (!overlay) return;
+        const isOn = overlay.style.display !== 'none' && overlay.style.display !== '';
+        const next = !isOn;
+        // Make layers mutually exclusive to avoid confusing stacked overlays.
+        setLayer(which, 'heatmap', false);
+        setLayer(which, 'defects', false);
+        setLayer(which, layer, next);
+      }
+
+      function openLightbox(which) {
+        const dlg = document.getElementById('compare-lightbox');
+        if (!dlg || typeof dlg.showModal !== 'function') return;
+
+        const base = document.querySelector('.compare-image-stack img.compare-base' + (which === 'left' ? ':nth-of-type(1)' : ':nth-of-type(1)'));
+        // Use the specific stack for the side.
+        const stack = document.querySelector('.compare-overlay[data-overlay="' + which + '"]')?.closest('.compare-image-stack');
+        const baseImg = stack ? stack.querySelector('img.compare-base') : null;
+        const overlayImg = stack ? stack.querySelector('.compare-overlay[data-overlay="' + which + '"][data-layer="defects"]') : null;
+
+        const dlgBase = document.getElementById('compare-lightbox-base');
+        const dlgOverlay = document.getElementById('compare-lightbox-overlay');
+        const dlgSide = document.getElementById('compare-lightbox-side');
+        const dlgTitle = document.getElementById('compare-lightbox-title');
+
+        if (!dlgBase || !dlgOverlay || !baseImg || !overlayImg) return;
+
+        dlgBase.src = baseImg.getAttribute('src') || '';
+        dlgOverlay.src = overlayImg.getAttribute('src') || '';
+        dlgOverlay.style.display = 'block';
+
+        if (dlgSide) dlgSide.textContent = (which === 'left' ? 'Left' : 'Right') + ' — defects (YOLO)';
+        // Try to read the brick name from the clicked button.
+        const btn = document.querySelector('[data-toggle="' + which + '"][data-layer="defects"]');
+        const name = btn ? (btn.getAttribute('data-brickname') || '') : '';
+        if (dlgTitle) dlgTitle.textContent = name || 'Brick';
+
+        dlg.showModal();
+      }
+
+      (function wireLightbox() {
+        const dlg = document.getElementById('compare-lightbox');
+        if (!dlg) return;
+
+        const closeBtn = document.getElementById('compare-lightbox-close');
+        if (closeBtn) closeBtn.addEventListener('click', () => dlg.close());
+
+        // Click outside the dialog content closes it.
+        dlg.addEventListener('click', (e) => {
+          if (e.target === dlg) dlg.close();
+        });
+      })();
+
+      document.querySelectorAll('[data-toggle]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const which = btn.getAttribute('data-toggle');
+          const layer = btn.getAttribute('data-layer');
+          if (!which || !layer) return;
+
+          toggle(which, layer);
+          if (layer === 'defects') openLightbox(which);
+        });
+      });
+    })();
+  </script>
+
+  <div style="margin-top:1.5rem;">
+    <h2 style="margin-bottom:1rem;">Brick Price Calculator</h2>
+    <span class="brush-stroke--grape brush-stroke" style="margin-bottom:1rem;"></span>
+
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div class="muted small">Step 1: Select Brick(s)</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.75rem;align-items:end;">
+        <div>
+          <label for="calc_sku">Brick SKU</label>
+          <select id="calc_sku" class="input" style="width:100%;">
+            <option value="">Select a brick</option>
+            {% for b in calc_pool or [] %}
+              <option value="{{ b.sku }}">{{ b.sku }} — {{ b.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted small" style="margin-top:0.25rem;">Pack size (bricks/pallet): <strong id="calc_pack_size_label">—</strong></div>
+        </div>
+
+        <div>
+          <label for="calc_sku_compare">Compare against (optional)</label>
+          <select id="calc_sku_compare" class="input" style="width:100%;">
+            <option value="">None</option>
+            {% for b in calc_pool or [] %}
+              <option value="{{ b.sku }}">{{ b.sku }} — {{ b.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="muted small" style="margin-top:0.25rem;">Pack size: <strong id="calc_pack_size_label_compare">—</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div class="muted small">Step 2: Quantity Mode</div>
+      <div class="tabs" style="margin-top:0.5rem;">
+        <button type="button" class="tab" data-mode="wall_area">Wall area</button>
+        <button type="button" class="tab" data-mode="house_preset">House preset</button>
+        <button type="button" class="tab" data-mode="density">Density</button>
+      </div>
+
+      <div id="calc_mode_wall_area" class="calc-mode" style="margin-top:0.75rem;">
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;align-items:end;">
+          <div>
+            <label for="calc_wall_area">Wall area (m²)</label>
+            <input id="calc_wall_area" type="number" min="0" step="0.1" placeholder="e.g. 180" />
+          </div>
+          <div>
+            <label for="calc_wall_type">Wall type</label>
+            <select id="calc_wall_type" class="input" style="width:100%;">
+              <option value="double_skin">Double skin (120 bricks/m²)</option>
+              <option value="single_skin">Single skin (60 bricks/m²)</option>
+            </select>
+          </div>
+          <div>
+            <label for="calc_waste">Waste % (0–25)</label>
+            <input id="calc_waste" type="number" min="0" max="25" step="0.5" value="10" />
+          </div>
+          <div>
+            <label for="calc_plots">Plots</label>
+            <input id="calc_plots" type="number" min="1" step="1" value="1" />
+          </div>
+        </div>
+      </div>
+
+      <div id="calc_mode_house_preset" class="calc-mode" style="margin-top:0.75rem;display:none;">
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem;align-items:end;">
+          <div>
+            <label for="calc_house_band">House size band</label>
+            <select id="calc_house_band" class="input" style="width:100%;">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+          <div>
+            <label for="calc_waste2">Waste % (0–25)</label>
+            <input id="calc_waste2" type="number" min="0" max="25" step="0.5" value="10" />
+          </div>
+          <div>
+            <label for="calc_plots2">Plots</label>
+            <input id="calc_plots2" type="number" min="1" step="1" value="1" />
+          </div>
+        </div>
+      </div>
+
+      <div id="calc_mode_density" class="calc-mode" style="margin-top:0.75rem;display:none;">
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.75rem;align-items:end;">
+          <div>
+            <label for="calc_acres">Net developable acres</label>
+            <input id="calc_acres" type="number" min="0" step="0.01" placeholder="e.g. 4.5" />
+          </div>
+          <div>
+            <label for="calc_hpa">Houses per acre</label>
+            <input id="calc_hpa" type="number" min="1" step="0.1" value="14" />
+          </div>
+          <div>
+            <label for="calc_density_submode">Bricks per plot via</label>
+            <select id="calc_density_submode" class="input" style="width:100%;">
+              <option value="wall_area" selected>Wall area</option>
+              <option value="house_preset">House preset</option>
+            </select>
+          </div>
+          <div>
+            <label for="calc_waste3">Waste % (0–25)</label>
+            <input id="calc_waste3" type="number" min="0" max="25" step="0.5" value="10" />
+          </div>
+        </div>
+
+        <div id="calc_density_wall_area" style="margin-top:0.75rem;">
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;align-items:end;">
+            <div>
+              <label for="calc_wall_area_d">Wall area (m²)</label>
+              <input id="calc_wall_area_d" type="number" min="0" step="0.1" placeholder="e.g. 180" />
+            </div>
+            <div>
+              <label for="calc_wall_type_d">Wall type</label>
+              <select id="calc_wall_type_d" class="input" style="width:100%;">
+                <option value="double_skin">Double skin</option>
+                <option value="single_skin">Single skin</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div id="calc_density_house_preset" style="margin-top:0.75rem;display:none;">
+          <div>
+            <label for="calc_house_band_d">House size band</label>
+            <select id="calc_house_band_d" class="input" style="width:100%;max-width:260px;">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div class="muted small">Step 3: Override controls</div>
+      <div style="margin-top:0.5rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:end;">
+        <label style="display:flex;gap:0.5rem;align-items:center;">
+          <input id="calc_pack_override_on" type="checkbox" />
+          Override pack size
+        </label>
+        <div style="min-width:180px;">
+          <label for="calc_pack_override">Custom pack size</label>
+          <input id="calc_pack_override" type="number" min="1" step="1" disabled placeholder="e.g. 500" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:0.75rem;">
+      <div class="muted small">Step 4: Pricing</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;align-items:end;margin-top:0.5rem;">
+        <div>
+          <label for="calc_price_mode">Price mode</label>
+          <select id="calc_price_mode" class="input" style="width:100%;">
+            <option value="asp_all_regions" selected>Use ASP (all regions)</option>
+            <option value="tiered_region">Use tiered region pricing</option>
+          </select>
+        </div>
+        <div>
+          <label for="calc_custom_asp">Custom ASP override (£/th)</label>
+          <input id="calc_custom_asp" type="number" min="0" step="0.01" placeholder="optional" />
+        </div>
+        <div id="calc_tiered_region_fields" style="display:none;">
+          <label for="calc_region">TW region</label>
+          <select id="calc_region" class="input" style="width:100%;">
+            <option value="">Select region</option>
+            {% for bu in bu_locations or [] %}
+              <option value="TAYLOR WIMPEY {{ bu.name|upper }}">TAYLOR WIMPEY {{ bu.name|upper }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="calc_tiered_factory_fields" style="display:none;">
+          <label for="calc_factory">Factory</label>
+          <select id="calc_factory" class="input" style="width:100%;">
+            <option value="">Select factory</option>
+            <option value="ATLAS">ATLAS</option>
+            <option value="CATTYBROOK">CATTYBROOK</option>
+            <option value="CHESTERTON">CHESTERTON</option>
+            <option value="DORKET HEAD">DORKET HEAD</option>
+            <option value="ELLISTOWN">ELLISTOWN</option>
+            <option value="ECLIPSE">ECLIPSE</option>
+            <option value="LODGE LANE">LODGE LANE</option>
+            <option value="PARKHOUSE">PARKHOUSE</option>
+            <option value="THROCKLEY">THROCKLEY</option>
+          </select>
+        </div>
+        <div id="calc_override_tier_fields" style="display:none;">
+          <label for="calc_override_tier">Override tier (optional)</label>
+          <select id="calc_override_tier" class="input" style="width:100%;">
+            <option value="">None</option>
+            <option value="T1">T1</option>
+            <option value="T2">T2</option>
+            <option value="T3">T3</option>
+            <option value="T4">T4</option>
+          </select>
+        </div>
+      </div>
+      <div class="muted small" id="calc_pricing_hint" style="margin-top:0.5rem;display:none;"></div>
+    </div>
+
+    <div class="card">
+      <div class="muted small">Step 5: Results</div>
+      <div style="margin-top:0.75rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+        <button type="button" id="calc_run">Calculate</button>
+        <span class="muted small" id="calc_error" style="display:none;"></span>
+      </div>
+
+      <div class="grid" style="margin-top:0.75rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.75rem;align-items:start;">
+        <div class="card" style="margin:0;">
+          <div class="muted small">Selected brick</div>
+          <div id="calc_approval" class="card" style="margin-top:0.5rem;display:none;background:var(--tw-rubine-light);border-color:var(--tw-rubine-red);">
+            <strong>Approval required</strong>
+            <div class="small">Approval required from Category Lead, Group Procurement</div>
+          </div>
+          <div class="grid" style="margin-top:0.75rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;align-items:start;">
+            <div class="stat-card"><div class="stat-label">Plots</div><div class="stat-value" id="r_plots">—</div></div>
+            <div class="stat-card"><div class="stat-label">Bricks per plot</div><div class="stat-value" id="r_bricks_per_plot">—</div></div>
+            <div class="stat-card"><div class="stat-label">Pallets per plot</div><div class="stat-value" id="r_pallets_per_plot">—</div></div>
+            <div class="stat-card"><div class="stat-label">Total bricks</div><div class="stat-value" id="r_total_bricks">—</div></div>
+            <div class="stat-card"><div class="stat-label">Total pallets</div><div class="stat-value" id="r_total_pallets">—</div></div>
+            <div class="stat-card"><div class="stat-label">Cost per plot (GBP)</div><div class="stat-value" id="r_cost_per_plot">—</div></div>
+            <div class="stat-card"><div class="stat-label">Total cost (GBP)</div><div class="stat-value" id="r_cost_total">—</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin:0;">
+          <div class="muted small">Compare against</div>
+          <div id="calc_approval_compare" class="card" style="margin-top:0.5rem;display:none;background:var(--tw-rubine-light);border-color:var(--tw-rubine-red);">
+            <strong>Approval required</strong>
+            <div class="small">Approval required from Category Lead, Group Procurement</div>
+          </div>
+          <div class="grid" style="margin-top:0.75rem;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.75rem;align-items:start;">
+            <div class="stat-card"><div class="stat-label">Plots</div><div class="stat-value" id="r2_plots">—</div></div>
+            <div class="stat-card"><div class="stat-label">Bricks per plot</div><div class="stat-value" id="r2_bricks_per_plot">—</div></div>
+            <div class="stat-card"><div class="stat-label">Pallets per plot</div><div class="stat-value" id="r2_pallets_per_plot">—</div></div>
+            <div class="stat-card"><div class="stat-label">Total bricks</div><div class="stat-value" id="r2_total_bricks">—</div></div>
+            <div class="stat-card"><div class="stat-label">Total pallets</div><div class="stat-value" id="r2_total_pallets">—</div></div>
+            <div class="stat-card"><div class="stat-label">Cost per plot (GBP)</div><div class="stat-value" id="r2_cost_per_plot">—</div></div>
+            <div class="stat-card"><div class="stat-label">Total cost (GBP)</div><div class="stat-value" id="r2_cost_total">—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:0.75rem;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem;align-items:start;">
+        <div class="stat-card"><div class="stat-label">Δ Cost per plot (GBP)</div><div class="stat-value" id="r_delta_cost_plot">—</div></div>
+        <div class="stat-card"><div class="stat-label">Δ Total cost (GBP)</div><div class="stat-value" id="r_delta_cost_total">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const skuEl = document.getElementById('calc_sku');
+      const skuCompareEl = document.getElementById('calc_sku_compare');
+      const packLabel = document.getElementById('calc_pack_size_label');
+      const packLabelCompare = document.getElementById('calc_pack_size_label_compare');
+      const packOverrideOn = document.getElementById('calc_pack_override_on');
+      const packOverride = document.getElementById('calc_pack_override');
+      const priceMode = document.getElementById('calc_price_mode');
+      const customAsp = document.getElementById('calc_custom_asp');
+      const regionWrap = document.getElementById('calc_tiered_region_fields');
+      const factoryWrap = document.getElementById('calc_tiered_factory_fields');
+      const tierWrap = document.getElementById('calc_override_tier_fields');
+      const regionEl = document.getElementById('calc_region');
+      const factoryEl = document.getElementById('calc_factory');
+      const overrideTier = document.getElementById('calc_override_tier');
+      const pricingHint = document.getElementById('calc_pricing_hint');
+
+      let calcMode = 'wall_area';
+      const tabs = Array.from(document.querySelectorAll('.tabs .tab'));
+      const modes = {
+        wall_area: document.getElementById('calc_mode_wall_area'),
+        house_preset: document.getElementById('calc_mode_house_preset'),
+        density: document.getElementById('calc_mode_density'),
+      };
+
+      function setMode(m){
+        calcMode = m;
+        for (const [k, el] of Object.entries(modes)) {
+          if (!el) continue;
+          el.style.display = (k === m) ? '' : 'none';
+        }
+        tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-mode') === m));
+      }
+      tabs.forEach(t => t.addEventListener('click', () => setMode(t.getAttribute('data-mode') || 'wall_area')));
+      setMode('wall_area');
+
+      function setPackOverrideUI(){
+        const on = !!(packOverrideOn && packOverrideOn.checked);
+        if (packOverride) packOverride.disabled = !on;
+      }
+      if (packOverrideOn) packOverrideOn.addEventListener('change', setPackOverrideUI);
+      setPackOverrideUI();
+
+      function setPricingUI(){
+        const mode = (priceMode && priceMode.value) || 'asp_all_regions';
+        const tiered = mode === 'tiered_region';
+        if (regionWrap) regionWrap.style.display = tiered ? '' : 'none';
+        if (factoryWrap) factoryWrap.style.display = tiered ? '' : 'none';
+        if (tierWrap) tierWrap.style.display = tiered ? '' : 'none';
+        if (pricingHint) pricingHint.style.display = 'none';
+      }
+      if (priceMode) priceMode.addEventListener('change', setPricingUI);
+      setPricingUI();
+
+      // Pack size is computed server-side, but show a quick hint immediately.
+      if (skuEl) {
+        skuEl.addEventListener('change', () => {
+          const v = (skuEl.value || '').trim();
+          packLabel.textContent = v ? 'Loaded from DB (or default)' : '—';
+        });
+      }
+      if (skuCompareEl) {
+        skuCompareEl.addEventListener('change', () => {
+          const v = (skuCompareEl.value || '').trim();
+          if (packLabelCompare) packLabelCompare.textContent = v ? 'Loaded from DB (or default)' : '—';
+        });
+      }
+
+      // Density sub-mode
+      const densitySub = document.getElementById('calc_density_submode');
+      const densWall = document.getElementById('calc_density_wall_area');
+      const densHouse = document.getElementById('calc_density_house_preset');
+      function setDensitySub(){
+        const v = (densitySub && densitySub.value) || 'wall_area';
+        if (densWall) densWall.style.display = v === 'wall_area' ? '' : 'none';
+        if (densHouse) densHouse.style.display = v === 'house_preset' ? '' : 'none';
+      }
+      if (densitySub) densitySub.addEventListener('change', setDensitySub);
+      setDensitySub();
+
+      function showErr(msg){
+        const el = document.getElementById('calc_error');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.style.display = msg ? 'inline' : 'none';
+      }
+
+      function setResult(id, v){
+        const el = document.getElementById(id);
+        if (el) el.textContent = (v === null || v === undefined || v === '') ? '—' : String(v);
+      }
+
+      function setMoney(id, v){
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (v === null || v === undefined || v === '') { el.textContent = '—'; return; }
+        const n = parseFloat(v);
+        if (Number.isNaN(n)) { el.textContent = String(v); return; }
+        el.textContent = n.toFixed(2);
+      }
+
+      function buildPayload(sku){
+        const wastePct = (val) => {
+          const x = parseFloat(val);
+          if (Number.isNaN(x)) return 0.10;
+          return Math.max(0, Math.min(0.25, x / 100.0));
+        };
+
+        const payload = {
+          brick_sku: sku,
+          calc_mode: calcMode,
+          wall_area_m2: null,
+          wall_type: null,
+          waste_pct: 0.10,
+          plots: 1,
+          custom_pack_size: null,
+          pricing: {
+            price_mode: (priceMode && priceMode.value) || 'asp_all_regions',
+            custom_asp_gbp_per_th: null,
+            tw_region_name: (regionEl && regionEl.value) || null,
+            selected_factory: (factoryEl && factoryEl.value) || null,
+            override_tier: (overrideTier && overrideTier.value) || null,
+          },
+          density: {
+            enabled: calcMode === 'density',
+            net_developable_acres: null,
+            houses_per_acre: 14,
+          },
+          house_preset: {
+            enabled: calcMode === 'house_preset',
+            size_band: 'medium',
+          }
+        };
+
+        if (packOverrideOn && packOverrideOn.checked) {
+          const n = parseInt((packOverride && packOverride.value) || '', 10);
+          if (!Number.isNaN(n) && n > 0) payload.custom_pack_size = n;
+        }
+
+        if (customAsp) {
+          const a = parseFloat(customAsp.value);
+          if (!Number.isNaN(a) && a >= 0) payload.pricing.custom_asp_gbp_per_th = a;
+        }
+
+        if (calcMode === 'wall_area') {
+          payload.wall_area_m2 = parseFloat(document.getElementById('calc_wall_area').value || '0');
+          payload.wall_type = (document.getElementById('calc_wall_type').value || 'double_skin');
+          payload.waste_pct = wastePct(document.getElementById('calc_waste').value || '10');
+          payload.plots = parseInt(document.getElementById('calc_plots').value || '1', 10) || 1;
+        } else if (calcMode === 'house_preset') {
+          payload.house_preset.enabled = true;
+          payload.house_preset.size_band = (document.getElementById('calc_house_band').value || 'medium');
+          payload.waste_pct = wastePct(document.getElementById('calc_waste2').value || '10');
+          payload.plots = parseInt(document.getElementById('calc_plots2').value || '1', 10) || 1;
+        } else if (calcMode === 'density') {
+          payload.density.enabled = true;
+          payload.density.net_developable_acres = parseFloat(document.getElementById('calc_acres').value || '0');
+          payload.density.houses_per_acre = parseFloat(document.getElementById('calc_hpa').value || '14');
+          payload.waste_pct = wastePct(document.getElementById('calc_waste3').value || '10');
+
+          const sub = (densitySub && densitySub.value) || 'wall_area';
+          if (sub === 'wall_area') {
+            payload.wall_area_m2 = parseFloat(document.getElementById('calc_wall_area_d').value || '0');
+            payload.wall_type = (document.getElementById('calc_wall_type_d').value || 'double_skin');
+          } else {
+            payload.house_preset.enabled = true;
+            payload.house_preset.size_band = (document.getElementById('calc_house_band_d').value || 'medium');
+          }
+        }
+
+        return payload;
+      }
+
+      async function postCalc(payload){
+        const resp = await fetch('/api/calc/bricks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          const msg = data && (data.error || data.message) ? (data.error || data.message) : 'Calculation failed.';
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      function renderPrimary(data){
+        packLabel.textContent = (data.pack_size_used ? String(data.pack_size_used) : '—') + (data.pack_size_source ? (' (' + data.pack_size_source + ')') : '');
+        setResult('r_plots', data.inputs && data.inputs.plots);
+        setResult('r_bricks_per_plot', data.quantity && data.quantity.bricks_per_plot);
+        setResult('r_pallets_per_plot', data.quantity && data.quantity.pallets_per_plot);
+        setResult('r_total_bricks', data.quantity && data.quantity.total_bricks);
+        setResult('r_total_pallets', data.quantity && data.quantity.total_pallets);
+        setMoney('r_cost_per_plot', data.cost && data.cost.cost_per_plot_gbp);
+        setMoney('r_cost_total', data.cost && data.cost.cost_total_gbp);
+
+        const appr = document.getElementById('calc_approval');
+        if (appr) appr.style.display = (data.pricing && data.pricing.approval_required) ? '' : 'none';
+      }
+
+      function renderCompare(data){
+        if (packLabelCompare) {
+          packLabelCompare.textContent = (data.pack_size_used ? String(data.pack_size_used) : '—') + (data.pack_size_source ? (' (' + data.pack_size_source + ')') : '');
+        }
+        setResult('r2_plots', data.inputs && data.inputs.plots);
+        setResult('r2_bricks_per_plot', data.quantity && data.quantity.bricks_per_plot);
+        setResult('r2_pallets_per_plot', data.quantity && data.quantity.pallets_per_plot);
+        setResult('r2_total_bricks', data.quantity && data.quantity.total_bricks);
+        setResult('r2_total_pallets', data.quantity && data.quantity.total_pallets);
+        setMoney('r2_cost_per_plot', data.cost && data.cost.cost_per_plot_gbp);
+        setMoney('r2_cost_total', data.cost && data.cost.cost_total_gbp);
+
+        const appr = document.getElementById('calc_approval_compare');
+        if (appr) appr.style.display = (data.pricing && data.pricing.approval_required) ? '' : 'none';
+      }
+
+      function clearCompare(){
+        if (packLabelCompare) packLabelCompare.textContent = '—';
+        ['r2_plots','r2_bricks_per_plot','r2_pallets_per_plot','r2_total_bricks','r2_total_pallets','r2_cost_per_plot','r2_cost_total'].forEach(id => setResult(id, null));
+        const appr = document.getElementById('calc_approval_compare');
+        if (appr) appr.style.display = 'none';
+      }
+
+      async function runCalc(){
+        showErr('');
+        const sku = (skuEl && skuEl.value || '').trim();
+        const sku2 = (skuCompareEl && skuCompareEl.value || '').trim();
+        if (!sku) { showErr('Select a brick SKU.'); return; }
+        if (sku2 && sku2.toLowerCase() === sku.toLowerCase()) { showErr('Compare brick must be different.'); return; }
+
+        try {
+          const data1 = await postCalc(buildPayload(sku));
+          renderPrimary(data1);
+
+          if (sku2) {
+            const data2 = await postCalc(buildPayload(sku2));
+            renderCompare(data2);
+
+            const c1p = (data1.cost && data1.cost.cost_per_plot_gbp) ?? null;
+            const c2p = (data2.cost && data2.cost.cost_per_plot_gbp) ?? null;
+            const c1t = (data1.cost && data1.cost.cost_total_gbp) ?? null;
+            const c2t = (data2.cost && data2.cost.cost_total_gbp) ?? null;
+            setMoney('r_delta_cost_plot', (c1p !== null && c2p !== null) ? (parseFloat(c2p) - parseFloat(c1p)) : null);
+            setMoney('r_delta_cost_total', (c1t !== null && c2t !== null) ? (parseFloat(c2t) - parseFloat(c1t)) : null);
+          } else {
+            clearCompare();
+            setResult('r_delta_cost_plot', null);
+            setResult('r_delta_cost_total', null);
+          }
+
+          if (pricingHint) {
+            if (data1.pricing && data1.pricing.price_source) {
+              pricingHint.textContent = 'Tier: ' + (data1.pricing.tier_used || '—') + ' • Source: ' + data1.pricing.price_source;
+              pricingHint.style.display = '';
+            } else {
+              pricingHint.style.display = 'none';
+            }
+          }
+        } catch (e) {
+          showErr((e && e.message) ? e.message : 'Calculation failed.');
+        }
+      }
+
+      const runBtn = document.getElementById('calc_run');
+      if (runBtn) runBtn.addEventListener('click', runCalc);
+    })();
+  </script>
+{% endif %}
+
+{% endblock %}
