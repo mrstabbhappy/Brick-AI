@@ -1,0 +1,50 @@
+trigger:
+- main
+
+pr: none
+
+pool:
+  name: tw-dna-dev
+  demands:
+  - ImageOverride -equals ubuntu-22.04
+
+variables:
+  azureSubscriptionName: 'brickai-dev-az-devops'
+  webAppName: 'aps-tw-ai-dev-uks-001'
+  resourceGroup: 'rg-tw-ai-dev-uks-001'
+  acrName: 'twdevdatacontainter'
+  imageName: 'brickai'
+  imageTag: 'latest'
+
+stages:
+- stage: Build
+  jobs:
+  - job: BuildAndPush
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: 'devops-data-dev'
+      inputs:
+        azureSubscription: $(azureSubscriptionName)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          set -euo pipefail
+          mkdir -p uploads
+          touch uploads/.gitkeep
+          az acr login --name $(acrName)
+          docker build -t $(acrName).azurecr.io/$(imageName):$(imageTag) .
+          docker push $(acrName).azurecr.io/$(imageName):$(imageTag)
+
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - job: Deploy
+    steps:
+    - task: AzureWebAppContainer@1
+      inputs:
+        azureSubscription: $(azureSubscriptionName)
+        appName: $(webAppName)
+        containers: |
+          $(acrName).azurecr.io/$(imageName):$(imageTag)

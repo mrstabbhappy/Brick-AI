@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% block title %}Assistant - Brick AI{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:1.5rem;">
+  <h1 class="page-title">AI assistant</h1>
+  <p class="muted small">Ask about bricks, pricing, weights, and specifications. Region-aware pricing uses your BU code.</p>
+  <span class="brush-stroke"></span>
+</div>
+
+<div class="chat-container">
+  <div class="chat-messages" id="chat-messages"></div>
+
+  <div class="chat-input-bar">
+    <textarea id="msg" rows="2" placeholder="e.g. Compare the price of red wirecut bricks in my region"></textarea>
+    <button id="send" style="height:44px;padding:0 1.25rem;">
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+      </svg>
+      Send
+    </button>
+  </div>
+</div>
+
+<script>
+  const chatMessages = document.getElementById('chat-messages');
+  const conversationHistory = [];
+
+  function addBubble(role, text) {
+    const div = document.createElement('div');
+    div.className = 'chat-bubble ' + (role === 'user' ? 'chat-bubble--user' : 'chat-bubble--ai');
+    div.textContent = text;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function addAssistantBubbleWithCards(text, cards) {
+    const div = document.createElement('div');
+    div.className = 'chat-bubble chat-bubble--ai';
+
+    const p = document.createElement('div');
+    p.textContent = text || '';
+    div.appendChild(p);
+
+    if (Array.isArray(cards) && cards.length) {
+      const grid = document.createElement('div');
+      grid.className = 'assistant-cards';
+
+      cards.forEach((c) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'assistant-card';
+
+        const img = document.createElement('img');
+        img.className = 'assistant-card__img';
+        img.alt = c.title || 'Brick image';
+        if (c.image_url) img.src = c.image_url;
+        btn.appendChild(img);
+
+        const meta = document.createElement('div');
+        meta.className = 'assistant-card__meta';
+
+        const title = document.createElement('div');
+        title.className = 'assistant-card__title';
+        title.textContent = c.title || '';
+        meta.appendChild(title);
+
+        if (c.subtitle) {
+          const sub = document.createElement('div');
+          sub.className = 'assistant-card__subtitle';
+          sub.textContent = c.subtitle;
+          meta.appendChild(sub);
+        }
+
+        btn.appendChild(meta);
+
+        btn.addEventListener('click', async () => {
+          // Show a quick user bubble for the selection
+          addBubble('user', c.title || 'Selected brick');
+          conversationHistory.push({role: 'user', content: c.title || 'Selected brick'});
+
+          // Typing indicator
+          const typing = document.createElement('div');
+          typing.className = 'chat-bubble chat-bubble--ai';
+          typing.textContent = 'Thinking...';
+          typing.style.opacity = '0.6';
+          chatMessages.appendChild(typing);
+
+          try {
+            const resp = await fetch('/assistant/chat', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({selection: c.choice, conversation_history: conversationHistory})
+            });
+            const data = await resp.json();
+            typing.remove();
+
+            if (data && Array.isArray(data.cards) && data.cards.length) {
+              addAssistantBubbleWithCards(data.text || '', data.cards);
+              conversationHistory.push({role: 'assistant', content: data.text || ''});
+            } else {
+              const replyText = data.text || JSON.stringify(data, null, 2);
+              addBubble('assistant', replyText);
+              conversationHistory.push({role: 'assistant', content: replyText});
+            }
+          } catch (err) {
+            typing.remove();
+            addBubble('assistant', 'Sorry, something went wrong. Please try again.');
+          }
+        });
+
+        grid.appendChild(btn);
+      });
+
+      div.appendChild(grid);
+    }
+
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  document.getElementById('send').addEventListener('click', async () => {
+    const input = document.getElementById('msg');
+    const message = input.value.trim();
+    if (!message) return;
+
+    addBubble('user', message);
+    conversationHistory.push({role: 'user', content: message});
+    input.value = '';
+
+    // Typing indicator
+    const typing = document.createElement('div');
+    typing.className = 'chat-bubble chat-bubble--ai';
+    typing.textContent = 'Thinking...';
+    typing.style.opacity = '0.6';
+    chatMessages.appendChild(typing);
+
+    try {
+      const resp = await fetch('/assistant/chat', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message, conversation_history: conversationHistory})
+      });
+      const data = await resp.json();
+      typing.remove();
+
+      if (data && Array.isArray(data.cards) && data.cards.length) {
+        addAssistantBubbleWithCards(data.text || '', data.cards);
+        conversationHistory.push({role: 'assistant', content: data.text || ''});
+      } else {
+        const replyText = data.text || JSON.stringify(data, null, 2);
+        addBubble('assistant', replyText);
+        conversationHistory.push({role: 'assistant', content: replyText});
+      }
+    } catch (err) {
+      typing.remove();
+      addBubble('assistant', 'Sorry, something went wrong. Please try again.');
+    }
+  });
+
+  // Submit on Enter (Shift+Enter for new line)
+  document.getElementById('msg').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('send').click();
+    }
+  });
+</script>
+
+{% endblock %}

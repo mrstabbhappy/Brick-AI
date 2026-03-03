@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+{% block title %}Brick Details - Brick AI{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+  <div>
+    <h1 class="page-title">Brick details</h1>
+    <p class="muted small">{{ metadata.get('display_name') or metadata.get('brick_name') or metadata.get('item_code') or brick_id }}</p>
+    <span class="brush-stroke"></span>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    <a href="{{ url_for('catalog') }}" class="btn-outline" style="padding:0.5rem 1rem;border-radius:var(--radius-brand);border:1px solid var(--border);font-weight:600;font-size:var(--text-sm);">Catalog</a>
+    <a href="{{ url_for('search') }}" class="btn-outline" style="padding:0.5rem 1rem;border-radius:var(--radius-brand);border:1px solid var(--border);font-weight:600;font-size:var(--text-sm);">Search</a>
+  </div>
+</div>
+
+<div class="card" style="display:grid;grid-template-columns: 240px 1fr;gap:1rem;align-items:start;">
+  <div>
+    {% if image_url %}
+      <img src="{{ image_url }}" alt="Brick image" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;border-radius:var(--radius-brand);border:1px solid var(--border);background:var(--bg-surface);" />
+    {% else %}
+      <div class="muted small">No image available</div>
+    {% endif %}
+    <div class="muted" style="font-size:var(--text-xs);margin-top:0.5rem;word-break:break-all;">{{ brick.get('image_path') }}</div>
+
+    <div style="margin-top:0.75rem;">
+      <form method="get" action="{{ url_for('results', brick_id=brick_id) }}" class="card" style="padding:0.75rem;">
+        <label for="bu" style="display:block;font-weight:700;margin-bottom:0.35rem;">Business Unit</label>
+        <select id="bu" name="bu" style="width:100%;" onchange="this.form.submit()">
+          <option value="" {% if not selected_bu_id %}selected{% endif %}>Select a BU location…</option>
+          {% set current_region = '' %}
+          {% for bu in bu_locations or [] %}
+            {% if bu.region != current_region %}
+              {% if current_region %}</optgroup>{% endif %}
+              {% set current_region = bu.region %}
+              <optgroup label="{{ current_region }}">
+            {% endif %}
+            <option value="{{ bu.id }}" {% if selected_bu_id == bu.id %}selected{% endif %}>{{ bu.name }}</option>
+          {% endfor %}
+          {% if current_region %}</optgroup>{% endif %}
+        </select>
+        <noscript>
+          <div style="margin-top:0.5rem;"><button type="submit">Update</button></div>
+        </noscript>
+
+        {% if selected_bu %}
+          <div class="muted" style="font-size:var(--text-xs);margin-top:0.5rem;">{{ selected_bu.address }}</div>
+        {% endif %}
+      </form>
+    </div>
+
+    <div style="margin-top:0.75rem;">
+      {% if distance_info and distance_info.map_iframe_url %}
+        <div class="card" style="padding:0.75rem;">
+          <div style="font-weight:700;margin-bottom:0.35rem;">Delivery route & CO₂</div>
+          <iframe
+            width="100%"
+            height="240"
+            style="border:0;border-radius:var(--radius-brand);"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+            src="{{ distance_info.map_iframe_url }}">
+          </iframe>
+          <div class="muted small" style="margin-top:0.5rem;">
+            Distance: {{ '%.1f'|format(distance_info.distance_km) }} km · CO₂: {{ '%.1f'|format(distance_info.co2_kg) }} kg ({{ '%.2f'|format(distance_info.co2_factor_kg_per_km) }} kg/km)
+          </div>
+        </div>
+      {% elif selected_bu_id %}
+        <div class="card" style="padding:0.75rem;">
+          <div style="font-weight:700;margin-bottom:0.35rem;">Delivery route & CO₂</div>
+          {% if not google_maps_enabled %}
+            <div class="muted small">Google Maps is not configured (set GOOGLE_MAPS_API_KEY).</div>
+          {% else %}
+            {% if distance_error %}
+              <div class="muted small">Could not calculate route/CO₂: {{ distance_error }}</div>
+            {% else %}
+              <div class="muted small">Could not calculate route/CO₂ for this brick (missing/invalid factory address).</div>
+            {% endif %}
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+      {% if metadata.get('brand') %}<span class="badge badge-grape">{{ metadata.get('brand') }}</span>{% endif %}
+      {% if metadata.get('factory') %}<span class="badge badge-success">{{ metadata.get('factory') }}</span>{% endif %}
+      {% if metadata.get('type') %}<span class="badge">{{ metadata.get('type') }}</span>{% endif %}
+      {% if metadata.get('colour') %}<span class="badge">{{ metadata.get('colour') }}</span>{% endif %}
+    </div>
+
+    <div class="muted small" style="margin-bottom:0.75rem;">
+      Ref: {{ (brick_id or '')[:8] }}
+    </div>
+
+    <h3 style="margin:0 0 0.5rem 0;">Details</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+      <tbody>
+        <tr>
+          <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);width:35%;">Item code</td>
+          <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ metadata.get('item_code') or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Display name</td>
+          <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ metadata.get('display_name') or metadata.get('brick_name') or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Brand</td>
+          <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ metadata.get('brand') or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Factory</td>
+          <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ metadata.get('factory') or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Type</td>
+          <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ metadata.get('type') or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Colour</td>
+          <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ metadata.get('colour') or '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    {% set pricing = metadata.get('pricing') or {} %}
+    {% if pricing %}
+      <h3 style="margin:1rem 0 0.5rem 0;">Pricing</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+        <tbody>
+          <tr>
+            <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);width:35%;">ASP (GBP/th)</td>
+            <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ pricing.get('asp_gbp_per_th') if pricing.get('asp_gbp_per_th') is not none else '—' }}</td>
+          </tr>
+          {% set band = pricing.get('price_band_gbp_per_th') or {} %}
+          <tr>
+            <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Price band</td>
+            <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ band.get('label') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {% set tiers = pricing.get('tier_prices_gbp_per_th') or {} %}
+      {% if tiers %}
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-top:0.75rem;">
+          <div class="card" style="padding:0.5rem;">
+            <div class="muted" style="font-size:var(--text-xs);">T1</div>
+            <div style="font-weight:700;">{{ tiers.get('T1') if tiers.get('T1') is not none else '—' }}</div>
+          </div>
+          <div class="card" style="padding:0.5rem;">
+            <div class="muted" style="font-size:var(--text-xs);">T2</div>
+            <div style="font-weight:700;">{{ tiers.get('T2') if tiers.get('T2') is not none else '—' }}</div>
+          </div>
+          <div class="card" style="padding:0.5rem;">
+            <div class="muted" style="font-size:var(--text-xs);">T3</div>
+            <div style="font-weight:700;">{{ tiers.get('T3') if tiers.get('T3') is not none else '—' }}</div>
+          </div>
+          <div class="card" style="padding:0.5rem;">
+            <div class="muted" style="font-size:var(--text-xs);">T4</div>
+            <div style="font-weight:700;">{{ tiers.get('T4') if tiers.get('T4') is not none else '—' }}</div>
+          </div>
+        </div>
+      {% endif %}
+
+      {% set regions = pricing.get('tw_regions') or [] %}
+      {% if regions %}
+        <div class="muted" style="font-size:var(--text-xs);margin-top:0.75rem;">
+          TW regions: {{ regions | length }}
+        </div>
+      {% endif %}
+    {% endif %}
+
+    {% set procurement = metadata.get('procurement') or {} %}
+    {% if procurement %}
+      <h3 style="margin:1rem 0 0.5rem 0;">Procurement</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);">
+        <tbody>
+          <tr>
+            <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);width:35%;">Home factory code</td>
+            <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ procurement.get('home_factory_code') or '—' }}</td>
+          </tr>
+          <tr>
+            <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Allowed tiers</td>
+            <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ (procurement.get('allowed_tiers_without_approval') or []) | join(', ') if procurement.get('allowed_tiers_without_approval') else '—' }}</td>
+          </tr>
+          <tr>
+            <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Approval required</td>
+            <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ (procurement.get('approval_required_tiers') or []) | join(', ') if procurement.get('approval_required_tiers') else '—' }}</td>
+          </tr>
+          <tr>
+            <td class="muted" style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">Approval role</td>
+            <td style="padding:0.35rem 0;border-bottom:1px solid var(--border-light);">{{ procurement.get('approval_role') or '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+</div>
+
+{% if matches is defined and matches %}
+  <div style="margin-top:1.25rem;">
+    <h2 style="margin:0 0 0.75rem 0;">Closest matches</h2>
+    <div class="card" style="padding:0.75rem;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:var(--text-sm);min-width:760px;">
+        <thead>
+          <tr>
+            <th class="muted" style="text-align:left;padding:0.5rem 0;border-bottom:1px solid var(--border);width:72px;">Image</th>
+            <th class="muted" style="text-align:left;padding:0.5rem 0;border-bottom:1px solid var(--border);">Name</th>
+            <th class="muted" style="text-align:left;padding:0.5rem 0;border-bottom:1px solid var(--border);">Brand</th>
+            <th class="muted" style="text-align:left;padding:0.5rem 0;border-bottom:1px solid var(--border);">Factory</th>
+            <th class="muted" style="text-align:left;padding:0.5rem 0;border-bottom:1px solid var(--border);">Colour</th>
+            <th class="muted" style="text-align:right;padding:0.5rem 0;border-bottom:1px solid var(--border);width:120px;">Score</th>
+            <th class="muted" style="text-align:right;padding:0.5rem 0;border-bottom:1px solid var(--border);width:110px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in matches %}
+            <tr>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);">
+                {% if m.image_path %}
+                  <img src="{{ url_for('uploads', relpath=m.image_path) }}" alt="Match" style="width:56px;height:56px;object-fit:cover;display:block;border-radius:var(--radius-brand);border:1px solid var(--border);background:var(--bg-surface);" />
+                {% else %}
+                  <div class="muted" style="font-size:var(--text-xs);">—</div>
+                {% endif %}
+              </td>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);">
+                <a href="{{ url_for('results', brick_id=m._id) }}" style="font-weight:700;">{{ ((m.metadata or {}).get('display_name') or (m.metadata or {}).get('brick_name') or (m.metadata or {}).get('item_number') or (m.metadata or {}).get('item_code') or m._id) }}</a>
+              </td>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);">{{ (m.metadata or {}).get('brand') or '—' }}</td>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);">{{ (m.metadata or {}).get('factory') or '—' }}</td>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);">{{ ((m.metadata or {}).get('colour') or (m.metadata or {}).get('brick_colour')) or '—' }}</td>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);text-align:right;font-weight:700;">{{ '%.1f'|format(m.overall_similarity*100) }}%</td>
+              <td style="padding:0.6rem 0;border-bottom:1px solid var(--border-light);text-align:right;white-space:nowrap;">
+                <a href="{{ url_for('compare', left=brick_id, right=m._id) }}">Compare</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Search Results - Brick AI{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:0.5rem;">
+  <div>
+    <h1 class="page-title">Search results</h1>
+    <p class="muted small">Found {{ matches|length }} matching bricks</p>
+    <span class="brush-stroke"></span>
+  </div>
+  <a href="{{ url_for('search') }}" class="btn-outline" style="padding:0.5rem 1rem;border-radius:var(--radius-brand);border:1px solid var(--border);font-weight:600;font-size:var(--text-sm);">New search</a>
+</div>
+
+<div class="grid">
+  {% for m in matches %}
+    <div class="card" style="transition:all 0.2s var(--ease-smooth);">
+      {% if m.image_path %}
+        <div style="margin-bottom:0.5rem;">
+          <img src="{{ url_for('uploads', relpath=m.image_path) }}" alt="{{ m.metadata.get('display_name') or m.metadata.get('brick_name') or m._id }}" style="width:100%;aspect-ratio:1/1;object-fit:cover;display:block;border-radius:var(--radius-brand);border:1px solid var(--border);background:var(--bg-surface);" />
+        </div>
+      {% endif %}
+      <div style="font-weight:700;color:var(--tw-grape);margin-bottom:0.35rem;">{{ m.metadata.get('brick_name') or m._id }}</div>
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+        <span class="badge badge-success">{{ '%.1f'|format(m.overall_similarity*100) }}% overall</span>
+      </div>
+
+      <div class="muted small" style="margin-bottom:0.75rem;">
+        Colour: {{ '%.1f'|format(m.colour_similarity*100) }}% &bull;
+        Texture: {{ '%.1f'|format(m.texture_similarity*100) }}%
+      </div>
+
+      
+      <div class="sim-bar-track" style="margin-bottom:0.75rem;">
+        <div class="sim-bar-fill" style="width:{{ (m.overall_similarity*100)|round }}%;"></div>
+      </div>
+
+      <a href="{{ url_for('results', brick_id=m._id) }}" class="btn" style="padding:0.4rem 0.75rem;font-size:var(--text-xs);width:100%;">View details</a>
+    </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

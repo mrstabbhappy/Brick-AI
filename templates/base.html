@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Brick AI{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lora:wght@700&family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ range(100000) | random }}" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        
+        <a href="{{ url_for('index') }}" class="topbar-brand">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.85;">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          Brick AI
+        </a>
+
+        
+        <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+
+        
+        <nav class="topbar-nav main-nav" id="main-nav">
+          <a href="{{ url_for('catalog') }}" class="topbar-link">Catalog</a>
+          <a href="{{ url_for('search') }}" class="topbar-link">AI search</a>
+          <a href="{{ url_for('compare') }}" class="topbar-link">Compare</a>
+          {% if g.user_is_admin %}
+            <a href="{{ url_for('ingest') }}" class="topbar-link">Ingest</a>
+          {% endif %}
+          <a href="{{ url_for('assistant.assistant_page') }}" class="topbar-link">Assistant</a>
+        </nav>
+
+        <div class="topbar-spacer"></div>
+
+        
+        {% if session.get('user_id') and g.user %}
+          <div class="flyout-wrapper">
+            <button class="profile-trigger" aria-label="Profile menu">
+              <div class="avatar">
+                {% if g.user.get('profile_picture') %}
+                  <img src="{{ url_for('uploads', relpath=g.user.profile_picture) }}" alt="{{ g.user.username }}" />
+                {% else %}
+                  {{ g.user.username[:2] }}
+                {% endif %}
+              </div>
+              <span class="profile-trigger-name">{{ g.user.username }}</span>
+              <svg class="profile-trigger-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+
+            <div class="flyout">
+              
+              <div class="flyout-header">
+                <div class="avatar">
+                  {% if g.user.get('profile_picture') %}
+                    <img src="{{ url_for('uploads', relpath=g.user.profile_picture) }}" alt="{{ g.user.username }}" />
+                  {% else %}
+                    {{ g.user.username[:2] }}
+                  {% endif %}
+                </div>
+                <div class="flyout-header-info">
+                  <div class="flyout-header-name">{{ g.user.username }}</div>
+                  <div class="flyout-header-email">{{ g.user.email }}</div>
+                </div>
+              </div>
+
+              
+              <div class="flyout-body">
+                <a href="{{ url_for('profile') }}" class="flyout-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                  Your profile
+                </a>
+                <a href="{{ url_for('catalog') }}" class="flyout-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                  </svg>
+                  Browse catalog
+                </a>
+                <a href="{{ url_for('assistant.assistant_page') }}" class="flyout-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  AI assistant
+                </a>
+                {% if g.user_is_admin %}
+                <div class="flyout-divider"></div>
+                <a href="{{ url_for('ingest') }}" class="flyout-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  Ingest bricks
+                </a>
+                {% endif %}
+                <div class="flyout-divider"></div>
+                <a href="{{ url_for('logout') }}" class="flyout-item flyout-item--danger">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                  </svg>
+                  Sign out
+                </a>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="topbar-auth">
+            <a href="{{ url_for('login') }}" class="topbar-btn-login">Sign in</a>
+            <a href="{{ url_for('register') }}" class="topbar-btn-register">Get started</a>
+          </div>
+        {% endif %}
+      </div>
+    </header>
+
+    <main class="container">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <div class="flash">{{ messages[0] }}</div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+
+    <script>
+      // Mobile nav toggle
+      const toggle = document.getElementById('mobile-toggle');
+      const nav = document.getElementById('main-nav');
+      if (toggle && nav) {
+        toggle.addEventListener('click', () => nav.classList.toggle('open'));
+      }
+    </script>
+  </body>
+</html>
